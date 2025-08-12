@@ -2,6 +2,7 @@
   "name": "api-subirclienteclickup",
   "version": "1.0.0",
   "main": "index.js",
+  "type": "module",
   "license": "MIT",
   "scripts": {
     "dev": "tsx watch src/server.ts",
