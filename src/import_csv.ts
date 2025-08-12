@@ -2,6 +2,12 @@ import fs from 'fs';
 import path from 'path';
 import axios from 'axios';
 import { parse } from 'csv-parse';
+import dotenv from 'dotenv';
+import { fileURLToPath } from 'url';
+dotenv.config();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 type LeadRow = Record<string, string | undefined>;
 

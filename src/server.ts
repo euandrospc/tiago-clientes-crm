@@ -2,8 +2,14 @@ import Fastify from 'fastify';
 import axios from 'axios';
 import { z } from 'zod';
 import dotenv from 'dotenv';
+import { spawn } from 'child_process';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 dotenv.config();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = Fastify({ logger: true });
 
@@ -743,11 +749,64 @@ app.get('/health', async (req, reply) => {
   return reply.send({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+async function runImportCSV() {
+  return new Promise<void>((resolve, reject) => {
+    app.log.info('Iniciando importação automática do CSV...');
+    
+    const importScriptPath = path.resolve(__dirname, 'import_csv.ts');
+    const child = spawn('npx', ['tsx', importScriptPath], {
+      stdio: 'pipe',
+      env: { ...process.env },
+      shell: true
+    });
+
+    let stdout = '';
+    let stderr = '';
+
+    child.stdout?.on('data', (data) => {
+      const output = data.toString();
+      stdout += output;
+      app.log.info(`[CSV Import] ${output.trim()}`);
+    });
+
+    child.stderr?.on('data', (data) => {
+      const error = data.toString();
+      stderr += error;
+      app.log.error(`[CSV Import Error] ${error.trim()}`);
+    });
+
+    child.on('close', (code) => {
+      if (code === 0) {
+        app.log.info('Importação CSV concluída com sucesso');
+        resolve();
+      } else {
+        app.log.error(`Importação CSV falhou com código: ${code}`);
+        if (stderr) app.log.error(`Erro: ${stderr}`);
+        reject(new Error(`Import process exited with code ${code}`));
+      }
+    });
+
+    child.on('error', (error) => {
+      app.log.error({ error }, 'Erro ao executar importação CSV');
+      reject(error);
+    });
+  });
+}
+
 const port = Number(process.env.PORT || 3000);
 const host = process.env.HOST || '0.0.0.0';
 
 app.listen({ port, host })
-  .then(() => app.log.info(`API running on http://${host}:${port}`))
+  .then(async () => {
+    app.log.info(`API running on http://${host}:${port}`);
+    
+    // Executar importação CSV após o servidor iniciar
+    try {
+      await runImportCSV();
+    } catch (error) {
+      app.log.error({ error }, 'Falha na importação automática do CSV, mas o servidor continuará rodando');
+    }
+  })
   .catch(err => {
     app.log.error(err, 'Failed to start');
     process.exit(1);
