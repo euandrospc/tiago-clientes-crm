@@ -5,6 +5,7 @@ import dotenv from 'dotenv';
 import { spawn } from 'child_process';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import fs from 'fs';
 
 dotenv.config();
 
@@ -750,25 +751,65 @@ app.get('/health', async (req, reply) => {
 });
 
 async function runImportCSV() {
-  return new Promise<void>((resolve, reject) => {
+  try {
     app.log.info('Iniciando importação automática do CSV...');
     
     const isProduction = process.env.NODE_ENV === 'production';
-    let command: string;
-    let args: string[];
-    let scriptPath: string;
-
+    app.log.info(`Ambiente: ${isProduction ? 'production' : 'development'}`);
+    
+    // Tentar execução direta primeiro se estivermos em produção
     if (isProduction) {
-      scriptPath = path.resolve(__dirname, 'import_csv.js');
-      command = 'node';
-      args = [scriptPath];
-    } else {
-      scriptPath = path.resolve(__dirname, 'import_csv.ts');
-      command = 'npx';
-      args = ['tsx', scriptPath];
+      const importScriptPath = path.resolve(__dirname, 'import_csv.js');
+      if (fs.existsSync(importScriptPath)) {
+        app.log.info('Tentando execução direta do módulo import_csv...');
+        try {
+          // Importar e executar diretamente
+          const { default: importMain } = await import(importScriptPath);
+          if (typeof importMain === 'function') {
+            await importMain();
+            app.log.info('Importação CSV concluída com sucesso (execução direta)');
+            return;
+          }
+        } catch (directError: any) {
+          app.log.warn(`Execução direta falhou: ${directError?.message || directError}, tentando com spawn...`);
+        }
+      }
+    }
+    
+    // Fallback para spawn
+    return new Promise<void>((resolve, reject) => {
+      let command: string;
+      let args: string[];
+      let scriptPath: string;
+
+      if (isProduction) {
+        scriptPath = path.resolve(__dirname, 'import_csv.js');
+        command = 'node';
+        args = [scriptPath];
+      } else {
+        scriptPath = path.resolve(__dirname, 'import_csv.ts');
+        command = 'npx';
+        args = ['tsx', scriptPath];
+      }
+
+    // Listar arquivos no diretório atual para debug
+    try {
+      const files = fs.readdirSync(__dirname);
+      app.log.info(`Arquivos no diretório ${__dirname}: ${files.join(', ')}`);
+      
+      // Verificar se existem planilhas
+      const planilhasPath = path.resolve(__dirname, 'Planilhas');
+      if (fs.existsSync(planilhasPath)) {
+        const planilhas = fs.readdirSync(planilhasPath);
+        app.log.info(`Planilhas encontradas: ${planilhas.join(', ')}`);
+      } else {
+        app.log.warn(`Diretório de planilhas não encontrado: ${planilhasPath}`);
+      }
+    } catch (e) {
+      app.log.error(`Erro ao listar arquivos: ${e}`);
     }
 
-    if (!require('fs').existsSync(scriptPath)) {
+    if (!fs.existsSync(scriptPath)) {
       app.log.error(`Script de importação não encontrado: ${scriptPath}`);
       reject(new Error(`Script not found: ${scriptPath}`));
       return;
@@ -805,16 +846,30 @@ async function runImportCSV() {
         resolve();
       } else {
         app.log.error(`Importação CSV falhou com código: ${code}`);
-        if (stderr) app.log.error(`Erro: ${stderr}`);
-        reject(new Error(`Import process exited with code ${code}`));
+        if (stderr) app.log.error(`Stderr: ${stderr}`);
+        if (stdout) app.log.error(`Stdout: ${stdout}`);
+        reject(new Error(`Import process exited with code ${code}. Stderr: ${stderr}`));
       }
     });
 
     child.on('error', (error) => {
-      app.log.error({ error }, 'Erro ao executar importação CSV');
+      app.log.error({ error: error.message, stack: error.stack }, 'Erro ao executar importação CSV');
       reject(error);
     });
-  });
+
+    // Timeout de segurança
+    setTimeout(() => {
+      if (!child.killed) {
+        app.log.warn('Importação CSV está demorando muito, terminando processo...');
+        child.kill('SIGTERM');
+        reject(new Error('Import process timeout'));
+      }
+    }, 300000); // 5 minutos
+    });
+  } catch (error: any) {
+    app.log.error({ error: error?.message || error }, 'Erro geral na importação CSV');
+    throw error;
+  }
 }
 
 const port = Number(process.env.PORT || 3000);
