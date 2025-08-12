@@ -753,11 +753,35 @@ async function runImportCSV() {
   return new Promise<void>((resolve, reject) => {
     app.log.info('Iniciando importação automática do CSV...');
     
-    const importScriptPath = path.resolve(__dirname, 'import_csv.ts');
-    const child = spawn('npx', ['tsx', importScriptPath], {
+    const isProduction = process.env.NODE_ENV === 'production';
+    let command: string;
+    let args: string[];
+    let scriptPath: string;
+
+    if (isProduction) {
+      scriptPath = path.resolve(__dirname, 'import_csv.js');
+      command = 'node';
+      args = [scriptPath];
+    } else {
+      scriptPath = path.resolve(__dirname, 'import_csv.ts');
+      command = 'npx';
+      args = ['tsx', scriptPath];
+    }
+
+    if (!require('fs').existsSync(scriptPath)) {
+      app.log.error(`Script de importação não encontrado: ${scriptPath}`);
+      reject(new Error(`Script not found: ${scriptPath}`));
+      return;
+    }
+
+    app.log.info(`Executando importação CSV: ${command} ${args.join(' ')}`);
+    app.log.info(`Diretório de trabalho: ${__dirname}`);
+    
+    const child = spawn(command, args, {
       stdio: 'pipe',
       env: { ...process.env },
-      shell: true
+      shell: true,
+      cwd: __dirname 
     });
 
     let stdout = '';

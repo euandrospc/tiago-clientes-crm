@@ -11,6 +11,8 @@ COPY . .
 
 RUN yarn build
 
+RUN mkdir -p dist/Planilhas && cp -r src/Planilhas/* dist/Planilhas/ || true
+
 RUN yarn install --frozen-lockfile --production && \
     yarn cache clean
 
