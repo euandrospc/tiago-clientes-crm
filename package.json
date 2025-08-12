@@ -1,0 +1,23 @@
+{
+  "name": "api-subirclienteclickup",
+  "version": "1.0.0",
+  "main": "index.js",
+  "license": "MIT",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "node dist/server.js",
+    "build": "tsc -p ."
+  },
+  "dependencies": {
+    "axios": "^1.11.0",
+    "csv-parse": "^6.1.0",
+    "dotenv": "^17.2.1",
+    "fastify": "^5.4.0",
+    "zod": "^4.0.17"
+  },
+  "devDependencies": {
+    "@types/node": "^24.2.1",
+    "tsx": "^4.20.3",
+    "typescript": "^5.9.2"
+  }
+}

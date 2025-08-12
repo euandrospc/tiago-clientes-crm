@@ -1,0 +1,19 @@
+# Node
+node_modules/
+dist/
+.DS_Store
+
+# Env/Secrets
+.env
+*.env*
+
+# Logs
+run.log
+server.log
+npm-debug.log*
+yarn-error.log*
+
+# Misc
+*.local
+coverage/
+.tmp/
